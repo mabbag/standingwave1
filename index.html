@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>정상파 생성과 특징 시뮬레이션</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7ede2; /* 사진의 연한 살구색 배경과 유사한 톤 */
+            margin: 0;
+            padding: 0;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 0.75rem;
+            background-color: #dff1fa; /* 첫 번째 사진의 그래프 하늘색 배경 */
+        }
+
+        /* 슬라이더 스타일링 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4a90e2;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        /* 커스텀 체크박스 */
+        .custom-checkbox {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #94a3b8;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .custom-checkbox:checked {
+            border-color: transparent;
+        }
+        .custom-checkbox::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .custom-checkbox:checked::after {
+            opacity: 1;
+        }
+        #cb-blue:checked { background-color: #3b82f6; }
+        #cb-red:checked { background-color: #ef4444; }
+        #cb-purple:checked { background-color: #8b5cf6; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        
+        <!-- 헤더 및 학습 목표 -->
+        <header class="glass-panel p-6 rounded-2xl">
+            <h1 class="text-2xl md:text-3xl font-bold text-center mb-4 text-slate-900">물결의 만남, 정상파 시뮬레이션</h1>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <h2 class="font-bold text-blue-800 mb-1">🎯 오늘의 학습 목표</h2>
+                <p class="text-blue-900 text-sm md:text-base">합성파 만들기를 통해 <strong class="text-blue-700">정상파 생성 과정</strong>을 알고, 정상파의 <strong class="text-blue-700">특성(마디와 배)</strong>을 설명할 수 있다.</p>
+            </div>
+        </header>
+
+        <!-- 메인 시뮬레이션 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 왼쪽: 캔버스 -->
+            <div class="lg:col-span-2 glass-panel p-4 rounded-2xl relative">
+                <!-- 캔버스 (JS에서 크기 자동 조절) -->
+                <canvas id="waveCanvas" width="800" height="600"></canvas>
+                
+                <!-- 동적 설명창 (시간에 따라 바뀜) -->
+                <div id="explanationBox" class="mt-4 p-4 bg-white/80 rounded-xl border border-slate-200 text-center min-h-[80px] flex items-center justify-center fade-in text-sm md:text-base font-medium text-slate-700 shadow-sm">
+                    설명이 여기에 나타납니다.
+                </div>
+            </div>
+
+            <!-- 오른쪽: 조작 패널 -->
+            <div class="glass-panel p-6 rounded-2xl flex flex-col space-y-6">
+                
+                <!-- 시간 조작부 -->
+                <div>
+                    <h3 class="font-bold text-lg mb-3 flex justify-between">
+                        <span>시간 (t) 조작</span>
+                        <span id="timeDisplay" class="text-blue-600">t=0</span>
+                    </h3>
+                    <input type="range" id="timeSlider" min="0" max="1" step="0.01" value="0">
+                    <div class="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>0</span>
+                        <span>T/4</span>
+                        <span>T/2</span>
+                        <span>3T/4</span>
+                        <span>T</span>
+                    </div>
+                    <button id="playBtn" class="mt-4 w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        ▶ 재생
+                    </button>
+                </div>
+
+                <hr class="border-slate-300">
+
+                <!-- 파동 표시 조작부 -->
+                <div>
+                    <h3 class="font-bold text-lg mb-3">파동 보기</h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="cb-blue" class="custom-checkbox" checked>
+                            <span class="text-slate-700">왼쪽으로 진행하는 파동 <span class="text-blue-600 font-bold">(파란색)</span></span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="cb-red" class="custom-checkbox" checked>
+                            <span class="text-slate-700">오른쪽으로 진행하는 파동 <span class="text-red-500 font-bold">(빨간색)</span></span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="cb-purple" class="custom-checkbox" checked>
+                            <span class="text-slate-700">중첩된 합성파 <span class="text-purple-600 font-bold">(보라색)</span></span>
+                        </label>
+                    </div>
+                </div>
+
+                <hr class="border-slate-300">
+
+                <!-- 구조 확인 버튼 (2번째 사진 모드) -->
+                <div>
+                    <h3 class="font-bold text-lg mb-3">정상파의 구조</h3>
+                    <p class="text-xs text-slate-500 mb-3">합성파가 현악기 줄처럼 진동하는 모습을 확인해보세요.</p>
+                    <button id="structureBtn" class="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold py-3 px-4 rounded-xl transition-all shadow-md transform active:scale-95">
+                        🔍 마디와 배 확인하기 (ON/OFF)
+                    </button>
+                </div>
+
+                <div class="flex-grow"></div>
+
+                <!-- 퀴즈 버튼 -->
+                <button id="quizOpenBtn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 px-4 rounded-xl transition-colors shadow-lg animate-pulse">
+                    🤔 이제 내가 이해했는지 확인해보자!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 퀴즈 모달 (기본 숨김) -->
+    <div id="quizModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button id="quizCloseBtn" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+            <h2 class="text-2xl font-bold mb-2 text-slate-800">이해 확인 퀴즈</h2>
+            <p class="text-slate-600 mb-6">시뮬레이션을 통해 배운 내용을 떠올려보세요!</p>
+            
+            <div class="bg-slate-100 p-4 rounded-lg mb-6">
+                <p class="font-semibold text-lg text-slate-800">Q. 정상파에서 진폭이 항상 0이라서 전혀 움직이지 않는 곳의 이름은 무엇일까요?</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <button class="quiz-option bg-white border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors" data-correct="false">파장</button>
+                <button class="quiz-option bg-white border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors" data-correct="true">마디</button>
+                <button class="quiz-option bg-white border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors" data-correct="false">배</button>
+                <button class="quiz-option bg-white border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-700 font-semibold py-3 rounded-xl transition-colors" data-correct="false">진폭</button>
+            </div>
+
+            <div id="quizResult" class="text-center font-bold text-lg h-8 hidden">
+                <!-- 결과 텍스트 영역 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 메시지 알림 박스 (alert 대체) -->
+    <div id="messageBox" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50">
+        메시지
+    </div>
+
+    <script>
+        // --- 1. 상태 및 상수 정의 ---
+        const state = {
+            t: 0, // 시간 (0 ~ 1은 0 ~ T를 의미)
+            isPlaying: false,
+            showBlue: true,
+            showRed: true,
+            showPurple: true,
+            showStructure: false // 마디와 배 구조 보기 모드
+        };
+
+        const config = {
+            A: 30, // 진폭 (기본)
+            wavelength: 0, // 캔버스 너비에 따라 동적 계산
+            period: 1, // 주기 (t가 0~1로 변함)
+            graphs: 3 // 그릴 그래프 구역의 수 (파란색, 빨간색, 합성파)
+        };
+
+        // --- 2. DOM 요소 연결 ---
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        const timeSlider = document.getElementById('timeSlider');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const playBtn = document.getElementById('playBtn');
+        const explanationBox = document.getElementById('explanationBox');
+        
+        const cbBlue = document.getElementById('cb-blue');
+        const cbRed = document.getElementById('cb-red');
+        const cbPurple = document.getElementById('cb-purple');
+        const structureBtn = document.getElementById('structureBtn');
+
+        // --- 3. 이벤트 리스너 ---
+        timeSlider.addEventListener('input', (e) => {
+            state.t = parseFloat(e.target.value);
+            if (state.isPlaying) togglePlay(); // 슬라이더 조작 시 자동재생 정지
+            updateText();
+            draw();
+        });
+
+        function togglePlay() {
+            state.isPlaying = !state.isPlaying;
+            playBtn.innerHTML = state.isPlaying ? '⏸ 일시정지' : '▶ 재생';
+            playBtn.classList.toggle('bg-red-500', state.isPlaying);
+            playBtn.classList.toggle('hover:bg-red-600', state.isPlaying);
+            if (state.isPlaying) requestAnimationFrame(animationLoop);
+        }
+        playBtn.addEventListener('click', togglePlay);
+
+        cbBlue.addEventListener('change', (e) => { state.showBlue = e.target.checked; draw(); });
+        cbRed.addEventListener('change', (e) => { state.showRed = e.target.checked; draw(); });
+        cbPurple.addEventListener('change', (e) => { state.showPurple = e.target.checked; draw(); });
+
+        structureBtn.addEventListener('click', () => {
+            state.showStructure = !state.showStructure;
+            if (state.showStructure) {
+                // 구조 모드를 켜면 보기 설정 고정 (가장 아래 파동만 집중)
+                cbBlue.checked = false; state.showBlue = false;
+                cbRed.checked = false; state.showRed = false;
+                cbPurple.checked = true; state.showPurple = true;
+                structureBtn.classList.replace('from-purple-500', 'from-indigo-600');
+                structureBtn.innerHTML = '🔙 기본 그래프로 돌아가기';
+                showMessage("현악기 줄이 진동하는 모습을 확인하세요!");
+            } else {
+                cbBlue.checked = true; state.showBlue = true;
+                cbRed.checked = true; state.showRed = true;
+                structureBtn.classList.replace('from-indigo-600', 'from-purple-500');
+                structureBtn.innerHTML = '🔍 마디와 배 확인하기 (ON/OFF)';
+            }
+            draw();
+        });
+
+        // --- 4. 설명 텍스트 업데이트 로직 ---
+        function updateText() {
+            // 시간 t 값을 보기 좋게 표시 (T/4, T/2 등)
+            let timeStr = "";
+            let explanation = "";
+            
+            // 오차 허용 범위
+            const eps = 0.05; 
+            
+            if (Math.abs(state.t - 0) < eps) {
+                timeStr = "t=0";
+                explanation = "▲ <strong>t=0</strong>에서 같은 위상이 되면 진폭이 최대로 커진다.";
+            } else if (Math.abs(state.t - 1) < eps) {
+                timeStr = "t=T";
+                explanation = "▲ <strong>t=T</strong>에서 같은 위상이 되면 진폭이 최대로 커진다.";
+            } else if (Math.abs(state.t - 0.25) < eps) {
+                timeStr = "t=T/4";
+                explanation = "▲ <strong>t=T/4</strong> 후에는 위상이 반대가 되어 진폭이 0이 된다.";
+            } else if (Math.abs(state.t - 0.5) < eps) {
+                timeStr = "t=T/2";
+                explanation = "▲ <strong>t=T/2</strong> 후에는 다시 같은 위상이 되어 진폭이 최대로 커지지만 <strong>t=0일 때와 변위 방향이 반대이다.</strong>";
+            } else if (Math.abs(state.t - 0.75) < eps) {
+                timeStr = "t=3T/4";
+                explanation = "▲ <strong>t=3T/4</strong> 후에는 위상이 반대가 되어 진폭이 0이 된다.";
+            } else {
+                timeStr = `t=${state.t.toFixed(2)}T`;
+                explanation = "두 파동이 중첩되어 정상파를 만들고 있습니다. (진행 중)";
+            }
+
+            if (state.showStructure) {
+                explanation = "정상파에서 항상 진동하지 않는 지점을 <strong>'마디'</strong>, 가장 크게 진동하는 지점을 <strong>'배'</strong>라고 합니다.";
+            }
+
+            timeDisplay.innerText = timeStr;
+            // 텍스트가 분절되는 현상을 막기 위해 <span> 태그로 전체 문장을 하나로 묶어줍니다.
+            explanationBox.innerHTML = `<span>${explanation}</span>`;
+        }
+
+        // --- 5. 캔버스 그리기 로직 ---
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            // 모바일에서는 높이를 조금 더 작게 설정
+            canvas.height = window.innerWidth < 768 ? 400 : 600;
+            config.wavelength = canvas.width / 1.5; // 사진처럼 한 화면에 1.5 파장 표시
+            draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawGraphAxesAndGrid(yOffset, height) {
+            // 기준선 (점선) - 마디의 위치 x = 0, 파장/2, 파장, 1.5파장
+            ctx.strokeStyle = '#9ca3af'; // gray-400
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            for (let i = 0; i <= 3; i++) {
+                let x = i * (config.wavelength / 2);
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // X축
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, yOffset);
+            ctx.lineTo(canvas.width, yOffset);
+            ctx.stroke();
+
+            // Y축
+            ctx.beginPath();
+            ctx.moveTo(10, yOffset - height/2 + 10);
+            ctx.lineTo(10, yOffset + height/2 - 10);
+            ctx.stroke();
+
+            // 축 라벨 (화살표 대신 간략화)
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'italic 16px Inter';
+            ctx.fillText('x', canvas.width - 20, yOffset + 20);
+            ctx.fillText('y', 15, yOffset - height/2 + 25);
+        }
+
+        function drawWave(yOffset, waveFunc, color, maxAmp, isDashed = false) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = isDashed ? 1.5 : 3;
+            if (isDashed) ctx.setLineDash([4, 4]);
+            else ctx.setLineDash([]);
+
+            for (let x = 0; x <= canvas.width; x += 2) {
+                // k = 2*PI / wavelength
+                // math logic: waveFunc takes (x, t) and returns y position
+                let y = waveFunc(x, state.t);
+                if (x === 0) ctx.moveTo(x, yOffset - y);
+                else ctx.lineTo(x, yOffset - y);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawDirectionArrow(yOffset, isLeft, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            let xPos = canvas.width / 2;
+            let yPos = yOffset - config.A - 15;
+            if (isLeft) {
+                ctx.moveTo(xPos, yPos);
+                ctx.lineTo(xPos + 15, yPos - 5);
+                ctx.lineTo(xPos + 15, yPos + 5);
+            } else {
+                ctx.moveTo(xPos, yPos);
+                ctx.lineTo(xPos - 15, yPos - 5);
+                ctx.lineTo(xPos - 15, yPos + 5);
+            }
+            ctx.fill();
+            
+            // 화살표 몸통
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(xPos, yPos);
+            ctx.lineTo(isLeft ? xPos + 40 : xPos - 40, yPos);
+            ctx.stroke();
+        }
+
+        // 마디(회색 구슬)와 배 글자 그리기
+        function drawStructureLabels(yOffset) {
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillStyle = '#1e293b';
+            ctx.textAlign = 'center';
+
+            for (let i = 0; i <= 3; i++) {
+                let x = i * (config.wavelength / 2);
+                
+                // 마디 (구슬 그리기)
+                // 방사형 그라데이션으로 입체감 표현
+                let grad = ctx.createRadialGradient(x - 2, yOffset - 2, 1, x, yOffset, 6);
+                grad.addColorStop(0, '#f8fafc');
+                grad.addColorStop(1, '#64748b');
+                
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(x, yOffset, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // 마디 텍스트
+                ctx.fillStyle = '#1e293b';
+                ctx.fillText('마디', x, yOffset + 25);
+
+                // 배 텍스트 (마디와 마디 사이)
+                if (i < 3) {
+                    let antinodeX = x + config.wavelength / 4;
+                    ctx.fillText('배', antinodeX, yOffset - (config.A * 2) - 10);
+                }
+            }
+            ctx.textAlign = 'left'; // 원상복구
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 수학적 파동 함수 정의
+            // 파란색: 왼쪽으로 진행 -> sin(kx + wt)
+            const k = (2 * Math.PI) / config.wavelength;
+            const w = 2 * Math.PI; // 주기 T=1 이므로 w = 2PI/T = 2PI
+            
+            const blueWave = (x, t) => config.A * Math.sin(k * x + w * t);
+            const redWave = (x, t) => config.A * Math.sin(k * x - w * t);
+            const purpleWave = (x, t) => blueWave(x, t) + redWave(x, t); // 중첩 (합성파)
+
+            const sectionHeight = canvas.height / 3;
+
+            if (!state.showStructure) {
+                // 1번째 사진 모드: 3개의 그래프를 위아래로 분리해서 표시
+                
+                // 1. 파란색 파동 (왼쪽 진행)
+                if (state.showBlue) {
+                    let yOff1 = sectionHeight * 0.5;
+                    drawGraphAxesAndGrid(yOff1, sectionHeight);
+                    drawWave(yOff1, blueWave, '#3d85c6', config.A);
+                    drawDirectionArrow(yOff1, true, '#3d85c6');
+                }
+
+                // 2. 빨간색 파동 (오른쪽 진행)
+                if (state.showRed) {
+                    let yOff2 = sectionHeight * 1.5;
+                    drawGraphAxesAndGrid(yOff2, sectionHeight);
+                    drawWave(yOff2, redWave, '#cc0000', config.A);
+                    drawDirectionArrow(yOff2, false, '#cc0000');
+                }
+
+                // 3. 보라색 파동 (합성파)
+                if (state.showPurple) {
+                    let yOff3 = sectionHeight * 2.5;
+                    drawGraphAxesAndGrid(yOff3, sectionHeight);
+                    drawWave(yOff3, purpleWave, '#8e7cc3', config.A * 2);
+                    
+                    // 마디에 검은 점 표시 (첫 번째 사진 반영)
+                    ctx.fillStyle = 'black';
+                    for (let i = 0; i <= 3; i++) {
+                        let x = i * (config.wavelength / 2);
+                        ctx.beginPath();
+                        ctx.arc(x, yOff3, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            } else {
+                // 2번째 사진 모드: 화면 중앙에 하나만 크게 표시하고 구조 설명
+                let centerOff = canvas.height / 2;
+                drawGraphAxesAndGrid(centerOff, canvas.height);
+
+                // 배경에 흐릿한 정상파 잔상(포락선) 그리기
+                for (let i = 0; i <= 10; i++) {
+                    let phase = (i / 10) * Math.PI;
+                    // 진폭이 cos(wt)에 따라 변함을 이용해 여러 순간의 잔상 그리기
+                    let shadowWave = (x) => 2 * config.A * Math.sin(k * x) * Math.cos(phase);
+                    drawWave(centerOff, shadowWave, 'rgba(61, 133, 198, 0.2)', config.A * 2); // 연한 파란색
+                }
+                
+                // 가장자리 경계선 (진폭 최대일 때의 포락선) 굵게
+                drawWave(centerOff, (x) => 2 * config.A * Math.sin(k * x), '#3d85c6', config.A * 2);
+                drawWave(centerOff, (x) => -2 * config.A * Math.sin(k * x), '#3d85c6', config.A * 2);
+
+                // 현재 줄의 위치 (사용자 요청: 1번 - 현재 상태를 빨간색으로!)
+                drawWave(centerOff, purpleWave, '#ef4444', config.A * 2); 
+                
+                // 마디와 배 라벨 및 시각적 요소 표시
+                drawStructureLabels(centerOff);
+            }
+        }
+
+        // --- 6. 애니메이션 루프 ---
+        function animationLoop() {
+            if (state.isPlaying) {
+                state.t += 0.005; // 속도 조절
+                if (state.t >= 1) state.t = 0; // 주기 반복
+                timeSlider.value = state.t;
+                updateText();
+                draw();
+                requestAnimationFrame(animationLoop);
+            }
+        }
+
+        // --- 7. 메시지 알림(alert 대체) ---
+        function showMessage(msg) {
+            const msgBox = document.getElementById('messageBox');
+            msgBox.innerText = msg;
+            msgBox.classList.remove('opacity-0');
+            setTimeout(() => {
+                msgBox.classList.add('opacity-0');
+            }, 2500);
+        }
+
+        // --- 8. 퀴즈 모달 로직 ---
+        const quizModal = document.getElementById('quizModal');
+        const quizOpenBtn = document.getElementById('quizOpenBtn');
+        const quizCloseBtn = document.getElementById('quizCloseBtn');
+        const quizOptions = document.querySelectorAll('.quiz-option');
+        const quizResult = document.getElementById('quizResult');
+
+        quizOpenBtn.addEventListener('click', () => {
+            quizModal.classList.remove('hidden');
+            quizResult.classList.add('hidden');
+            // 옵션 스타일 초기화
+            quizOptions.forEach(btn => {
+                btn.classList.remove('bg-red-100', 'border-red-500', 'bg-emerald-100', 'border-emerald-500', 'text-emerald-700', 'text-red-700');
+            });
+        });
+
+        quizCloseBtn.addEventListener('click', () => {
+            quizModal.classList.add('hidden');
+        });
+
+        quizOptions.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const isCorrect = this.getAttribute('data-correct') === 'true';
+                quizResult.classList.remove('hidden');
+                
+                if (isCorrect) {
+                    this.classList.add('bg-emerald-100', 'border-emerald-500', 'text-emerald-700');
+                    quizResult.innerHTML = '🎉 정답입니다! 전혀 움직이지 않는 곳은 <span class="text-emerald-600">마디</span>입니다.';
+                    quizResult.className = 'text-center font-bold text-lg mt-4 text-emerald-600 block';
+                    setTimeout(() => { quizModal.classList.add('hidden'); }, 2000);
+                } else {
+                    this.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
+                    quizResult.innerHTML = '😅 아쉽네요. 다시 한번 생각해볼까요?';
+                    quizResult.className = 'text-center font-bold text-lg mt-4 text-red-500 block';
+                }
+            });
+        });
+
+        // --- 9. 초기화 ---
+        window.onload = function() {
+            resizeCanvas();
+            updateText();
+        }
+
+    </script>
+</body>
+</html>
